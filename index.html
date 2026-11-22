@@ -1,0 +1,699 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <title>A bouquet for someone special</title>
+    <style>
+      :root {
+        --bg: #f3eefb;
+        box-sizing: border-box;
+        padding-top: env(safe-area-inset-top, 0px);
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #070a12;
+        }
+      }
+      :root[data-theme="dark"] {
+        --bg: #070a12;
+      }
+      html {
+        scroll-padding-top: env(safe-area-inset-top, 0px);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+      }
+      body {
+        background: var(--bg);
+        display: grid;
+        place-items: center;
+        padding: 10px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      .stage {
+        position: relative;
+        width: min(100%, 1000px);
+        height: 100%;
+        border-radius: 20px;
+        overflow: hidden;
+        background: radial-gradient(
+          ellipse at 50% 42%,
+          #2b2148 0%,
+          #151829 52%,
+          #080b12 100%
+        );
+        color: #c8b4f3;
+      }
+      canvas {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+        touch-action: none;
+        cursor: grab;
+      }
+      header {
+        position: absolute;
+        top: 18px;
+        left: 22px;
+        right: 22px;
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        color: #8d91ad;
+        pointer-events: none;
+      }
+      header b {
+        font-weight: 500;
+        color: #ffb3e1;
+      }
+      footer {
+        position: absolute;
+        bottom: 20px;
+        left: 0;
+        right: 0;
+        text-align: center;
+        font-size: clamp(13px, 2.2vw, 18px);
+        letter-spacing: 0.04em;
+        pointer-events: none;
+      }
+      footer small {
+        display: block;
+        margin-top: 6px;
+        font-size: 10px;
+        color: #747d9b;
+      }
+      .zoom {
+        position: absolute;
+        right: 18px;
+        bottom: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .zoom button {
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        border: 1px solid #4a4170;
+        background: rgba(30, 25, 55, 0.7);
+        color: #e0ccff;
+        font:
+          20px/1 ui-monospace,
+          Menlo,
+          Consolas,
+          monospace;
+        cursor: pointer;
+      }
+      .zoom button:hover {
+        background: rgba(60, 45, 105, 0.85);
+      }
+      .zoom button:focus-visible {
+        outline: 2px solid #ffb3e1;
+        outline-offset: 2px;
+      }
+      @media (max-width: 600px) {
+        header {
+          font-size: 10px;
+          top: 14px;
+          left: 14px;
+          right: 14px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <canvas id="c"></canvas>
+      <header>
+        <span><b>✦</b> flower bouquet</span
+        ><span>drag to rotate, scroll or pinch to zoom</span>
+      </header>
+      <div class="zoom">
+        <button id="zi" aria-label="Zoom in">+</button
+        ><button id="zo" aria-label="Zoom out">−</button>
+      </div>
+      <footer>
+        <span>for someone special</span>
+        <small>made with love by <a>akidong</a></small>
+      </footer>
+    </div>
+    <script>
+      (() => {
+        const cv = document.getElementById("c"),
+          ctx = cv.getContext("2d");
+        let W = 0,
+          H = 0,
+          cw = 7,
+          chh = 8,
+          scale = 150,
+          cols = 0,
+          rows = 0,
+          zb,
+          ib,
+          zoom = 1,
+          zoomT = 1,
+          zApplied = 0;
+        const clampZ = (v) => Math.max(0.5, Math.min(3, v));
+        function resize() {
+          const r = cv.getBoundingClientRect(),
+            dpr = Math.min(devicePixelRatio || 1, 2);
+          W = r.width;
+          H = r.height;
+          cv.width = W * dpr;
+          cv.height = H * dpr;
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          scale = Math.min(W / 3.5, (H - 110) / 3.9);
+          layout();
+        }
+        function layout() {
+          zApplied = zoom;
+          const fs = Math.max(6, Math.min(40, scale * zoom * 0.052));
+          ctx.font =
+            fs + "px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace";
+          cw = ctx.measureText("M").width;
+          chh = fs * 1.08;
+          cols = Math.ceil(W / cw) + 1;
+          rows = Math.ceil(H / chh) + 1;
+          if (!zb || zb.length < cols * rows) {
+            zb = new Float32Array(cols * rows);
+            ib = new Int32Array(cols * rows);
+          }
+        }
+        // ---------- scene ----------
+        const PAL = [
+          [255, 110, 190],
+          [255, 70, 70],
+          [176, 120, 255],
+          [255, 214, 64],
+          [255, 150, 60],
+          [255, 244, 255],
+          [120, 235, 130],
+          [60, 180, 100],
+          [220, 210, 245],
+          [255, 150, 210],
+          [255, 200, 60],
+          [150, 80, 30],
+          [255, 120, 200],
+          [90, 200, 110],
+          [205, 160, 255],
+        ];
+        const RAMP = [
+          ".:+o%#@",
+          ".-=+%#@",
+          ".:!|I",
+          "oO0@",
+          "=*#=",
+          "|!I",
+          "·+*",
+        ];
+        const D = [];
+        const add = (p, n, c, r) =>
+          D.push(p[0], p[1], p[2], n[0], n[1], n[2], c, r);
+        const nrm = (a) => {
+          const m = Math.hypot(a[0], a[1], a[2]) || 1;
+          return [a[0] / m, a[1] / m, a[2] / m];
+        };
+        const crs = (a, b) => [
+          a[1] * b[2] - a[2] * b[1],
+          a[2] * b[0] - a[0] * b[2],
+          a[0] * b[1] - a[1] * b[0],
+        ];
+        const P = (p, ...t) => {
+          const o = p.slice();
+          for (let i = 0; i < t.length; i += 2) {
+            const d = t[i],
+              k = t[i + 1];
+            o[0] += d[0] * k;
+            o[1] += d[1] * k;
+            o[2] += d[2] * k;
+          }
+          return o;
+        };
+        const basis = (ax) => {
+          const h = Math.abs(ax[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0],
+            u = nrm(crs(h, ax));
+          return [u, crs(ax, u)];
+        };
+        let seed = 21;
+        const rnd = () => {
+          seed |= 0;
+          seed = (seed + 0x6d2b79f5) | 0;
+          let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+          t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+        const TAU = Math.PI * 2,
+          DS = 0.03,
+          Z = [0, 0, 0];
+
+        function daisy(p, ax, c, R, np) {
+          const [u, v] = basis(ax);
+          for (let k = 0; k < np; k++) {
+            const a = (k * TAU) / np,
+              dir = P(Z, u, Math.cos(a), v, Math.sin(a)),
+              side = crs(ax, dir);
+            const r0 = R * 0.2,
+              hw = (1.1 * Math.PI * 0.6 * R) / np,
+              nr = Math.ceil((R - r0) / DS);
+            for (let i = 0; i <= nr; i++) {
+              const t = i / nr,
+                r = r0 + (R - r0) * t,
+                w = hw * Math.sin(Math.PI * Math.pow(t, 0.7)),
+                lift = R * 0.28 * t * t,
+                nw = Math.max(1, Math.ceil((w * 2) / DS));
+              const n = nrm(P(ax, dir, -0.55 * t));
+              for (let j = 0; j <= nw; j++)
+                add(
+                  P(p, dir, r, side, ((j / nw) * 2 - 1) * w, ax, lift),
+                  n,
+                  c,
+                  0,
+                );
+            }
+          }
+          const cc = c === 3 || c === 4 || c === 1 ? 11 : 10,
+            cr = 0.23 * R;
+          for (let r = 0; r <= cr; r += 0.025) {
+            const m = Math.max(1, Math.round((TAU * r) / 0.025));
+            for (let k = 0; k < m; k++) {
+              const a = (k / m) * TAU;
+              add(
+                P(
+                  p,
+                  u,
+                  Math.cos(a) * r,
+                  v,
+                  Math.sin(a) * r,
+                  ax,
+                  0.03 + 0.04 * (1 - r / cr),
+                ),
+                ax,
+                cc,
+                3,
+              );
+            }
+          }
+        }
+        function tulip(p, ax, c, R) {
+          const [u, v] = basis(ax),
+            H = R * 2.2,
+            np = 6,
+            nt = Math.ceil(H / DS);
+          for (let k = 0; k < np; k++) {
+            const a0 = (k * TAU) / np,
+              col = k % 2 ? 14 : 2,
+              half = (Math.PI / np) * 1.3;
+            for (let i = 0; i <= nt; i++) {
+              const t = i / nt,
+                rad = R * (0.38 + 0.62 * Math.sin(Math.PI * t * 0.85)),
+                nw = Math.max(2, Math.ceil((rad * half * 2) / DS));
+              for (let j = 0; j <= nw; j++) {
+                const f = (j / nw) * 2 - 1,
+                  th = a0 + f * half,
+                  rd = P(Z, u, Math.cos(th), v, Math.sin(th));
+                add(
+                  P(
+                    p,
+                    ax,
+                    H * t,
+                    rd,
+                    rad * (1 + 0.1 * Math.cos((f * Math.PI) / 2)),
+                  ),
+                  nrm(P(rd, ax, (0.5 - t) * 0.9)),
+                  col,
+                  0,
+                );
+              }
+            }
+          }
+        }
+        // flowers on a golden-angle dome
+        const NF = 11,
+          G = Math.PI * (3 - Math.sqrt(5)),
+          CC = [0, 0.95, 0],
+          NECK = [0, 0.2, 0],
+          FC = [0, 5, 1, 3, 2, 4, 0, 1, 2, 3, 14];
+        for (let i = 0; i < NF; i++) {
+          const el = ((88 - 58 * Math.sqrt(i / (NF - 1))) * Math.PI) / 180,
+            az = i * G;
+          const d = [
+            Math.cos(el) * Math.cos(az),
+            Math.sin(el),
+            Math.cos(el) * Math.sin(az),
+          ];
+          const p = P(CC, d, 1.1 * (0.93 + rnd() * 0.12)),
+            c = FC[i],
+            R = 0.27 + rnd() * 0.06;
+          const L = Math.hypot(p[0] - NECK[0], p[1] - NECK[1], p[2] - NECK[2]),
+            n = Math.ceil(L / DS);
+          for (let k = 0; k <= n; k++) {
+            const t = k / n;
+            add(
+              [
+                p[0] * (1 - t) + NECK[0] * t,
+                p[1] * (1 - t) + NECK[1] * t,
+                p[2] * (1 - t) + NECK[2] * t,
+              ],
+              [0, 0, 1],
+              13,
+              5,
+            );
+          }
+          c === 2 || c === 14
+            ? tulip(p, d, c, R)
+            : daisy(p, d, c, R, c === 5 ? 10 : 9);
+        }
+        // baby's breath filler
+        for (let i = 0; i < 90; i++) {
+          const th = rnd() * TAU,
+            ph = Math.acos(1 - rnd() * 0.85),
+            r = 1.05 + rnd() * 0.35,
+            d = [
+              Math.sin(ph) * Math.cos(th),
+              Math.cos(ph),
+              Math.sin(ph) * Math.sin(th),
+            ];
+          const p = P(CC, d, r);
+          add(p, d, 5, 6);
+          add(P(p, [1, 0, 0], 0.03), d, 5, 6);
+          add(P(p, [0, 1, 0], 0.03), d, 5, 6);
+        }
+        // big leaves splaying out
+        for (let k = 0; k < 9; k++) {
+          const a = (k * TAU) / 9 + 0.35,
+            L = k % 2 ? 0.95 : 1.2,
+            cs = Math.cos(a),
+            sn = Math.sin(a),
+            sd = [-sn, 0, cs],
+            hw0 = 0.19 + (k % 3) * 0.015,
+            nt = Math.ceil(L / DS),
+            col = k % 2 ? 7 : 6;
+          const n = nrm([cs * 0.3, 1, sn * 0.3]);
+          for (let i = 0; i <= nt; i++) {
+            const t = i / nt,
+              rr = 0.3 + t * L * 0.9,
+              cy = 0.85 + 0.3 * L * t - 0.55 * L * t * t,
+              hw = hw0 * Math.sin(Math.PI * Math.pow(t, 0.75)),
+              nw = Math.max(1, Math.ceil((hw * 2) / DS));
+            for (let j = 0; j <= nw; j++) {
+              const s = ((j / nw) * 2 - 1) * hw;
+              add(
+                [
+                  cs * rr + sd[0] * s,
+                  cy + 0.5 * Math.abs(s),
+                  sn * rr + sd[2] * s,
+                ],
+                n,
+                col,
+                1,
+              );
+            }
+          }
+        }
+        // wrapping cone
+        const CT = -1.4,
+          CR = 0.65,
+          RAD = (y) => 0.06 + ((y - CT) / (CR - CT)) * 0.8;
+        const ny = Math.ceil((CR - CT) / DS);
+        for (let i = 0; i <= ny; i++) {
+          const y = CT + ((CR - CT) * i) / ny,
+            r = RAD(y),
+            nt = Math.max(6, Math.ceil((TAU * r) / DS));
+          for (let j = 0; j < nt; j++) {
+            const th = (j / nt) * TAU,
+              band = ((th / TAU) * 5 + (i / ny) * 2.5) % 1 < 0.14;
+            add(
+              [Math.cos(th) * r, y, Math.sin(th) * r],
+              [Math.cos(th), 0.35, Math.sin(th)],
+              band ? 9 : 8,
+              2,
+            );
+          }
+        }
+        for (let row = 0; row < 2; row++) {
+          const nt = Math.ceil((TAU * RAD(CR)) / 0.025);
+          for (let j = 0; j < nt; j++) {
+            const th = (j / nt) * TAU,
+              r = RAD(CR) + 0.04 + row * 0.02;
+            add(
+              [
+                Math.cos(th) * r,
+                CR + 0.05 * Math.sin(th * 7) + 0.02 - row * 0.03,
+                Math.sin(th) * r,
+              ],
+              [Math.cos(th), 0.6, Math.sin(th)],
+              8,
+              2,
+            );
+          }
+        }
+        // ribbon + bow
+        const RY = -0.12,
+          rr = RAD(RY) + 0.025;
+        for (let row = 0; row < 2; row++) {
+          const nt = Math.ceil((TAU * rr) / DS);
+          for (let j = 0; j < nt; j++) {
+            const th = (j / nt) * TAU;
+            add(
+              [Math.cos(th) * rr, RY - row * 0.03, Math.sin(th) * rr],
+              [Math.cos(th), 0, Math.sin(th)],
+              12,
+              4,
+            );
+          }
+        }
+        const bz = rr + 0.05,
+          by = RY + 0.02;
+        for (const sd of [-1, 1])
+          for (const sc of [0.6, 0.8, 1]) {
+            const A = sd * 0.3,
+              cA = Math.cos(A),
+              sA = Math.sin(A),
+              n = Math.ceil((TAU * 0.12 * sc) / 0.03);
+            for (let k = 0; k < n; k++) {
+              const f = (k / n) * TAU,
+                x = Math.cos(f) * 0.15 * sc,
+                y = Math.sin(f) * 0.075 * sc;
+              add(
+                [sd * 0.15 + x * cA - y * sA, by + x * sA + y * cA, bz],
+                [0, 0, 1],
+                12,
+                4,
+              );
+            }
+          }
+        for (let r = 0; r <= 0.045; r += 0.015) {
+          const m = Math.max(1, Math.round((TAU * r) / 0.015));
+          for (let k = 0; k < m; k++) {
+            const a = (k / m) * TAU;
+            add(
+              [Math.cos(a) * r, by + Math.sin(a) * r, bz + 0.02],
+              [0, 0, 1],
+              9,
+              3,
+            );
+          }
+        }
+        for (const sd of [-1, 1])
+          for (let t = 0; t <= 1; t += 0.1) {
+            const y = RY - 0.02 - t * 0.22;
+            add([sd * (0.03 + 0.08 * t), y, RAD(y) + 0.05], [0, 0, 1], 12, 4);
+          }
+        // stems below the wrap
+        for (const [x, z] of [
+          [-0.05, 0.02],
+          [-0.02, -0.03],
+          [0.02, 0.03],
+          [0.05, -0.01],
+          [0, 0],
+        ])
+          for (let y = CT + 0.02; y > -1.75; y -= 0.03)
+            add([x, y, z], [0, 0, 1], 13, 5);
+
+        const DATA = Float32Array.from(D),
+          NP = DATA.length / 8;
+        // ---------- render ----------
+        let ang = 0,
+          tiltBase = 0.2,
+          drag = false,
+          lx = 0,
+          ly = 0;
+        const Lv = (() => {
+            const a = [-0.4, 0.6, 0.75],
+              m = Math.hypot(...a);
+            return a.map((v) => v / m);
+          })(),
+          cache = new Map();
+        function colorStr(c, q) {
+          const k = c * 16 + q;
+          let s = cache.get(k);
+          if (!s) {
+            const f = 0.4 + (0.7 * q) / 15,
+              p = PAL[c];
+            s =
+              "rgb(" +
+              Math.min(255, (p[0] * f) | 0) +
+              "," +
+              Math.min(255, (p[1] * f) | 0) +
+              "," +
+              Math.min(255, (p[2] * f) | 0) +
+              ")";
+            cache.set(k, s);
+          }
+          return s;
+        }
+        function frame(now) {
+          const T = now / 1000;
+          if (!drag) ang += 0.006;
+          zoom += (zoomT - zoom) * 0.15;
+          if (Math.abs(zoomT - zoom) < 0.001) zoom = zoomT;
+          if (zoom !== zApplied) layout();
+          const tilt = tiltBase + 0.035 * Math.sin(T * 0.7),
+            ca = Math.cos(ang),
+            sa = Math.sin(ang),
+            ct = Math.cos(tilt),
+            st = Math.sin(tilt),
+            cx = W / 2,
+            cy = H * 0.5;
+          ctx.clearRect(0, 0, W, H);
+          zb.fill(-1e9);
+          ib.fill(-1);
+          for (let i = 0, o = 0; i < NP; i++, o += 8) {
+            const x = DATA[o],
+              y = DATA[o + 1],
+              z = DATA[o + 2],
+              x1 = x * ca - z * sa,
+              z1 = x * sa + z * ca,
+              y2 = y * ct - z1 * st,
+              z2 = y * st + z1 * ct,
+              f = 6 / (6 - z2);
+            const px = cx + x1 * scale * zoom * f,
+              py = cy - (y2 - 0.15) * scale * zoom * f;
+            if (px < 0 || py < 0) continue;
+            const col = (px / cw) | 0,
+              row = (py / chh) | 0;
+            if (col >= cols || row >= rows) continue;
+            const idx = row * cols + col;
+            if (z2 > zb[idx]) {
+              zb[idx] = z2;
+              ib[idx] = o;
+            }
+          }
+          let last = "";
+          for (let row = 0; row < rows; row++)
+            for (let col = 0; col < cols; col++) {
+              const idx = row * cols + col,
+                o = ib[idx];
+              if (o < 0) continue;
+              const nx = DATA[o + 3],
+                ny = DATA[o + 4],
+                nz = DATA[o + 5],
+                n1x = nx * ca - nz * sa,
+                n1z = nx * sa + nz * ca,
+                n2y = ny * ct - n1z * st,
+                n2z = ny * st + n1z * ct,
+                nl = Math.hypot(n1x, n2y, n2z) || 1;
+              let l = Math.min(
+                1,
+                0.2 +
+                  (0.85 * Math.abs(n1x * Lv[0] + n2y * Lv[1] + n2z * Lv[2])) /
+                    nl,
+              );
+              l *= Math.max(0.5, Math.min(1, 0.78 + 0.2 * zb[idx]));
+              const rp = RAMP[DATA[o + 7]],
+                g = rp[Math.min(rp.length - 1, (l * rp.length) | 0)],
+                s = colorStr(DATA[o + 6], Math.min(15, (l * 16) | 0));
+              if (s !== last) {
+                ctx.fillStyle = s;
+                last = s;
+              }
+              ctx.fillText(g, col * cw, (row + 0.85) * chh);
+            }
+          ctx.fillStyle = "#e0ccff";
+          for (let i = 0; i < 14; i++) {
+            const a = i * 2.4 + T * 0.25,
+              r = scale * (1.3 + (i % 3) * 0.2);
+            ctx.globalAlpha = Math.abs(Math.sin(T * 1.6 + i * 1.7)) * 0.6;
+            ctx.fillText(
+              i % 2 ? "✧" : "✦",
+              cx + Math.cos(a) * r * 0.9,
+              cy + Math.sin(a) * r * 0.8,
+            );
+          }
+          ctx.globalAlpha = 1;
+          requestAnimationFrame(frame);
+        }
+        const ptr = new Map();
+        let pd = 0;
+        cv.addEventListener("pointerdown", (e) => {
+          ptr.set(e.pointerId, [e.clientX, e.clientY]);
+          cv.setPointerCapture(e.pointerId);
+          cv.style.cursor = "grabbing";
+          drag = true;
+          if (ptr.size === 2) {
+            const [a, b] = [...ptr.values()];
+            pd = Math.hypot(a[0] - b[0], a[1] - b[1]);
+          }
+        });
+        cv.addEventListener("pointermove", (e) => {
+          const p = ptr.get(e.pointerId);
+          if (!p) return;
+          if (ptr.size === 2) {
+            ptr.set(e.pointerId, [e.clientX, e.clientY]);
+            const [a, b] = [...ptr.values()],
+              d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+            if (pd > 0) zoomT = clampZ((zoomT * d) / pd);
+            pd = d;
+            return;
+          }
+          ang += (e.clientX - p[0]) * 0.01;
+          tiltBase = Math.max(
+            -0.1,
+            Math.min(0.5, tiltBase + (e.clientY - p[1]) * 0.004),
+          );
+          ptr.set(e.pointerId, [e.clientX, e.clientY]);
+        });
+        const end = (e) => {
+          ptr.delete(e.pointerId);
+          if (!ptr.size) {
+            drag = false;
+            cv.style.cursor = "grab";
+          }
+        };
+        cv.addEventListener("pointerup", end);
+        cv.addEventListener("pointercancel", end);
+        cv.addEventListener(
+          "wheel",
+          (e) => {
+            e.preventDefault();
+            zoomT = clampZ(zoomT * Math.exp(-e.deltaY * 0.0015));
+          },
+          { passive: false },
+        );
+        document.getElementById("zi").addEventListener("click", () => {
+          zoomT = clampZ(zoomT * 1.25);
+        });
+        document.getElementById("zo").addEventListener("click", () => {
+          zoomT = clampZ(zoomT / 1.25);
+        });
+        new ResizeObserver(resize).observe(cv);
+        resize();
+        requestAnimationFrame(frame);
+      })();
+    </script>
+  </body>
+</html>
