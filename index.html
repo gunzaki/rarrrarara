@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
-    <title>A bouquet for someone special</title>
+    <title>bokey para sau lods las mo sakin e</title>
     <style>
       :root {
         --bg: #f3eefb;
@@ -33,8 +33,11 @@
         margin: 0;
         height: 100%;
         overflow: hidden;
+        overscroll-behavior: none;
+        -webkit-tap-highlight-color: transparent;
       }
       body {
+        height: 100dvh;
         background: var(--bg);
         display: grid;
         place-items: center;
@@ -43,6 +46,9 @@
       }
       .stage {
         position: relative;
+        touch-action: none;
+        -webkit-user-select: none;
+        user-select: none;
         width: min(100%, 1000px);
         height: 100%;
         border-radius: 20px;
@@ -125,12 +131,38 @@
         outline: 2px solid #ffb3e1;
         outline-offset: 2px;
       }
+      .short {
+        display: none;
+      }
       @media (max-width: 600px) {
+        body {
+          padding: 6px;
+        }
+        .stage {
+          border-radius: 16px;
+        }
         header {
           font-size: 10px;
           top: 14px;
           left: 14px;
           right: 14px;
+        }
+        .long {
+          display: none;
+        }
+        .short {
+          display: inline;
+        }
+        footer {
+          bottom: 16px;
+        }
+        .zoom {
+          right: 12px;
+          bottom: 14px;
+        }
+        .zoom button {
+          width: 44px;
+          height: 44px;
         }
       }
     </style>
@@ -140,15 +172,17 @@
       <canvas id="c"></canvas>
       <header>
         <span><b>✦</b> flower bouquet</span
-        ><span>drag to rotate, scroll or pinch to zoom</span>
+        ><span class="long">drag to rotate, scroll or pinch to zoom</span
+        ><span class="short">pinch to zoom</span>
       </header>
       <div class="zoom">
-        <button id="zi" aria-label="Zoom in">+</button
+        <button id="zr" aria-label="Reset view">↺</button
+        ><button id="zi" aria-label="Zoom in">+</button
         ><button id="zo" aria-label="Zoom out">−</button>
       </div>
       <footer>
         <span>for someone special</span>
-        <small>made with love by <a>akidong</a></small>
+        <small>made with love by akidong<a href="https://twitter.com/0x6f6f" target="_blank"></a></small>
       </footer>
     </div>
     <script>
@@ -574,15 +608,15 @@
           ib.fill(-1);
           for (let i = 0, o = 0; i < NP; i++, o += 8) {
             const x = DATA[o],
-              y = DATA[o + 1],
+              y = DATA[o + 1] - 0.15,
               z = DATA[o + 2],
               x1 = x * ca - z * sa,
               z1 = x * sa + z * ca,
               y2 = y * ct - z1 * st,
               z2 = y * st + z1 * ct,
-              f = 6 / (6 - z2);
+              f = 8 / (8 - z2);
             const px = cx + x1 * scale * zoom * f,
-              py = cy - (y2 - 0.15) * scale * zoom * f;
+              py = cy - y2 * scale * zoom * f;
             if (px < 0 || py < 0) continue;
             const col = (px / cw) | 0,
               row = (py / chh) | 0;
@@ -661,10 +695,7 @@
             return;
           }
           ang += (e.clientX - p[0]) * 0.01;
-          tiltBase = Math.max(
-            -0.1,
-            Math.min(0.5, tiltBase + (e.clientY - p[1]) * 0.004),
-          );
+          tiltBase += (e.clientY - p[1]) * 0.008;
           ptr.set(e.pointerId, [e.clientX, e.clientY]);
         });
         const end = (e) => {
@@ -689,6 +720,11 @@
         });
         document.getElementById("zo").addEventListener("click", () => {
           zoomT = clampZ(zoomT / 1.25);
+        });
+        document.getElementById("zr").addEventListener("click", () => {
+          tiltBase = 0.2;
+          zoomT = 1;
+          ang = 0;
         });
         new ResizeObserver(resize).observe(cv);
         resize();
